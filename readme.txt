@@ -65,7 +65,7 @@ Use the snippet below to have admins always use the admin page in english.
         global $english_wordpress_admin_plugin;
         $english_wordpress_admin_plugin->set_cookie(1);
         add_filter('english_wordpress_admin_show_admin_bar', '__return_false');
-}
+    }
 
 = This plugin does not solve my needs =
 
