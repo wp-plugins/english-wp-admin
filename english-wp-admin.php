@@ -3,7 +3,7 @@
 Plugin Name: English WordPress Admin
 Plugin URI: http://wordpress.org/plugins/english-wp-admin
 Description: Lets users change their administration language to English
-Version: 1.2
+Version: 1.2.1
 Author: khromov
 Author URI: http://snippets.khromov.se
 License: GPL2
@@ -165,7 +165,7 @@ class Admin_Custom_Language
 	 */
 	function cookie_setting_value()
 	{
-		if(isset($_COOKIE['wordpress_admin_default_language_'. COOKIEHASH]))
+		if(defined('COOKIEHASH') && isset($_COOKIE['wordpress_admin_default_language_'. COOKIEHASH]))
 			return intval($_COOKIE['wordpress_admin_default_language_'. COOKIEHASH]);
 		else
 			return null;
