@@ -78,7 +78,8 @@ This is a tiny plugin with a small mission. If you want better customization, ch
 == Changelog ==
 
 = 1.3.1 =
-* Fixed an edge case where the "You only have English language installed." message would appear erroneously.
+* Fixed an edge case where the "You only have English language installed." 
+message would appear erroneously.
 
 = 1.3.0 =
 * When changing language, you are now sent back to the page you were originally on instead of being reverted to the dashboard.
