@@ -3,7 +3,7 @@
 Plugin Name: English WordPress Admin
 Plugin URI: http://wordpress.org/plugins/english-wp-admin
 Description: Lets users change their administration language to English
-Version: 1.3.1
+Version: 1.3.2
 Author: khromov
 Author URI: http://snippets.khromov.se
 License: GPL2
@@ -40,7 +40,7 @@ class Admin_Custom_Language
 	function set_locale($lang)
 	{
 		//If cookie is set and enabled, and we are not doing frontend AJAX, we should switch the locale
-		if($this->english_admin_enabled() && !$this->request_is_frontend_ajax())
+		if($this->english_admin_enabled() && !$this->request_is_frontend_ajax() && !$this->request_is_options_general_form())
 		{
 			//Switch locale if we are on an admin page
 			if(is_admin())
@@ -77,6 +77,18 @@ class Admin_Custom_Language
 	}
 
 	/**
+	 * Checks if a version number is larger than or equal to a certain version
+	 *
+	 * @param $version
+	 * @return bool
+	 */
+	function is_version($version)
+	{
+		global $wp_version;
+		return version_compare($wp_version, $version, '>=');
+	}
+
+	/**
 	 * Sets the cookie. (1 year expiry)
 	 */
 	function set_cookie($value = '1')
@@ -92,6 +104,30 @@ class Admin_Custom_Language
 	function request_is_frontend_ajax()
 	{
 		return defined('DOING_AJAX') && DOING_AJAX && false === strpos( wp_get_referer(), '/wp-admin/' );
+	}
+
+	/**
+	 * Check so that we are not on options-general.php, due to WP 4.0 issue:
+	 * https://core.trac.wordpress.org/ticket/29362#comment:5
+	 *
+	 * @return bool
+	 */
+	function request_is_options_general_form()
+	{
+		//Perform check for new WP versions
+		if($this->is_version('4.0'))
+		{
+			$request_uri = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '';
+
+			if(substr($request_uri, -19) === 'options-general.php')
+				return true;
+			else
+				return false;
+		}
+		else //Don't do checks for old versions
+		{
+			return false;
+		}
 	}
 
 	/**
@@ -146,8 +182,11 @@ class Admin_Custom_Language
 				'parent' => 'admin-custom-language-icon'
 			);
 
-			$wp_admin_bar->add_node($main_bar);
-			$wp_admin_bar->add_node($main_bar_sub);
+			if(!$this->request_is_options_general_form())
+			{
+				$wp_admin_bar->add_node($main_bar);
+				$wp_admin_bar->add_node($main_bar_sub);
+			}
 
 		}
 
