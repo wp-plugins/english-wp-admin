@@ -3,9 +3,10 @@
 Plugin Name: English WordPress Admin
 Plugin URI: http://wordpress.org/plugins/english-wp-admin
 Description: Lets users change their administration language to English
-Version: 1.3.2
+Version: 1.4.1
 Author: khromov
 Author URI: http://snippets.khromov.se
+GitHub Plugin URI: khromov/wp-english-wp-admin
 License: GPL2
 */
 
@@ -20,14 +21,22 @@ class Admin_Custom_Language
 		//Locale filter
 		add_filter('locale', array(&$this, 'set_locale'));
 
-		//Registers GET listener to toggle setting
-		add_action('init', array(&$this, 'register_endpoints'));
-
 		//Adds admin bar menu
 		add_action('admin_bar_menu', array(&$this, 'admin_bar'), 31);
 		add_action('admin_head', array($this, 'admin_css'));
 
-		if($this->english_install_only())
+		//Init action
+		add_action('init', array($this, 'init'));
+	}
+
+
+	function init()
+	{
+		//Registers GET listener to toggle setting
+		$this->register_endpoints();
+
+		//Message if WPML installed
+		if($this->wpml_installed())
 			add_action( 'admin_notices', array($this, 'admin_notices'));
 	}
 
@@ -39,8 +48,8 @@ class Admin_Custom_Language
 	 */
 	function set_locale($lang)
 	{
-		//If cookie is set and enabled, and we are not doing frontend AJAX, we should switch the locale
-		if($this->english_admin_enabled() && !$this->request_is_frontend_ajax() && !$this->request_is_options_general_form())
+		//If cookie is set and enabled, and we are not doing frontend AJAX, and we are not on a whitelisted URL, and this is not a WooCommerce action, we should switch the locale
+		if($this->english_admin_enabled() && !$this->request_is_frontend_ajax() && !$this->in_url_whitelist() && !$this->woocommerce_action())
 		{
 			//Switch locale if we are on an admin page
 			if(is_admin())
@@ -49,6 +58,19 @@ class Admin_Custom_Language
 
 		//Default return
 		return $lang;
+	}
+
+	/**
+	 * Attempt to identify WooCommerce actions (like sending emails)
+	 *
+	 * @return bool
+	 */
+	function woocommerce_action()
+	{
+		if(isset($_POST['wc_order_action']))
+			return true;
+		else
+			return false;
 	}
 
 	/**
@@ -74,6 +96,29 @@ class Admin_Custom_Language
 					wp_redirect(admin_url());
 			}
 		}
+	}
+
+	/**
+	 * Whitelist some URL:s from translation
+	 *
+	 * @return bool
+	 */
+	function in_url_whitelist()
+	{
+		$whitelisted_urls = apply_filters('english_wordpress_admin_whitelist', array(
+			'wp-admin/update-core.php',
+			'wp-admin/options-general.php'
+		));
+
+		$request_uri = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '';
+
+		foreach($whitelisted_urls as $whitelisted_url)
+		{
+			if(strpos($request_uri, $whitelisted_url) !== false)
+				return true;
+		}
+
+		return false;
 	}
 
 	/**
@@ -103,31 +148,19 @@ class Admin_Custom_Language
 	 */
 	function request_is_frontend_ajax()
 	{
-		return defined('DOING_AJAX') && DOING_AJAX && false === strpos( wp_get_referer(), '/wp-admin/' );
-	}
+		$script_filename = isset($_SERVER['SCRIPT_FILENAME']) ? $_SERVER['SCRIPT_FILENAME'] : '';
 
-	/**
-	 * Check so that we are not on options-general.php, due to WP 4.0 issue:
-	 * https://core.trac.wordpress.org/ticket/29362#comment:5
-	 *
-	 * @return bool
-	 */
-	function request_is_options_general_form()
-	{
-		//Perform check for new WP versions
-		if($this->is_version('4.0'))
+		//Try to figure out if frontend AJAX request... If we are DOING_AJAX; let's look closer
+		if((defined('DOING_AJAX') && DOING_AJAX))
 		{
-			$request_uri = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '';
-
-			if(substr($request_uri, -19) === 'options-general.php')
+			//If referer does not contain admin URL and we are using the admin-ajax.php endpoint, this is likely a frontend AJAX request
+			if(((strpos(wp_get_referer(), admin_url()) === false) && (basename($script_filename) === 'admin-ajax.php')))
 				return true;
-			else
+			else //Otherwise, this is probably a regular backend AJAX request
 				return false;
 		}
-		else //Don't do checks for old versions
-		{
+		else //We are not doing AJAX;  no chance of it being a frontend AJAX request
 			return false;
-		}
 	}
 
 	/**
@@ -137,15 +170,29 @@ class Admin_Custom_Language
 	 */
 	function english_install_only()
 	{
+		if($this->wpml_installed())
+			return false;
+
+		//If using WPLANG, otherwise check DB
 		if(defined('WPLANG'))
-			return (WPLANG === 'en_US' || WPLANG === '') ? true : false;
+			return (WPLANG === 'en_US' || trim(WPLANG) === '') ? true : false;
 		else
 		{
-			if(function_exists('get_bloginfo') && get_bloginfo('language') !== 'en_US')
+			//If language not en_US and not empty in database
+			if(function_exists('get_bloginfo') && (get_bloginfo('language') !== 'en_US' || trim(get_bloginfo('language')) !== '') )
 				return false;
 			else
 				return true;
 		}
+	}
+
+	/**
+	 * Checks if WPML is installed
+	 * @return bool
+	 */
+	function wpml_installed()
+	{
+		return defined('ICL_LANGUAGE_CODE');
 	}
 
 	/**
@@ -155,8 +202,8 @@ class Admin_Custom_Language
 	 */
 	function admin_bar($wp_admin_bar)
 	{
-		//We're in admin and this is not an english-only install
-		if(is_admin() && !$this->english_install_only() && apply_filters('english_wordpress_admin_show_admin_bar', true) === true)
+		//We're in admin and this is not a WPML install
+		if(is_admin() && apply_filters('english_wordpress_admin_show_admin_bar', true) === true)
 		{
 			//Sets up the toggle link
 			$toggle_href = admin_url('?admin_custom_language_toggle=' . ($this->english_admin_enabled() ? '0' : '1') . '&admin_custom_language_return_url=' . urlencode((is_ssl() ? 'https' : 'http') . '://' . $_SERVER["HTTP_HOST"] . $_SERVER["REQUEST_URI"]));
@@ -182,14 +229,12 @@ class Admin_Custom_Language
 				'parent' => 'admin-custom-language-icon'
 			);
 
-			if(!$this->request_is_options_general_form())
+			if(!$this->in_url_whitelist())
 			{
 				$wp_admin_bar->add_node($main_bar);
 				$wp_admin_bar->add_node($main_bar_sub);
 			}
-
 		}
-
 	}
 
 	/**
@@ -267,7 +312,7 @@ class Admin_Custom_Language
 	{
 		?>
 		<div class="error">
-			<p><?php _e( "<strong>English Wordpress Admin Error</strong> <br/>You only have English language installed. Please install another language before using this plugin. <a href='http://codex.wordpress.org/Installing_WordPress_in_Your_Language' target='_blank'>Read more (WordPress codex)</a> <br/> This plugin is not compatible with WPML, as WPML already provides this functionality under the \"Profile\" tab.", 'admin-custom-language' ); ?></p>
+			<p><?php _e( "<strong>English Wordpress Admin Error</strong> <br/>You only have English language installed, or you are using WPML. If you only have English installed, please install another language before using this plugin. <a href='http://codex.wordpress.org/Installing_WordPress_in_Your_Language' target='_blank'>Read more (WordPress codex)</a> <br/> If you are using WPML, you do not need this plugin. WPML already provides a language switcher that can be configured under the \"Profile\" tab.", 'admin-custom-language' ); ?></p>
 		</div>
 		<?php
 	}
